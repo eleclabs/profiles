@@ -50,7 +50,7 @@ export default function CreateProfile() {  // เปลี่ยนชื่อ�
   const [profileImage, setProfileImage] = useState(null);
   const [showPendingMessage, setShowPendingMessage] = useState(false);
   
-  // ตรวจสอบการล็อกอิน
+  // ตรวจสอบการล็อกอินและโหลดข้อมูลโปรไฟล์
   useEffect(() => {
     // Only run on client-side
     if (typeof window === 'undefined') return;
@@ -61,6 +61,9 @@ export default function CreateProfile() {  // เปลี่ยนชื่อ�
       return;
     }
     
+    // Load existing profile data
+    loadProfileData();
+    
     // Check if user is pending and show message
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -69,6 +72,67 @@ export default function CreateProfile() {  // เปลี่ยนชื่อ�
       console.error('Error checking user status:', error);
     }
   }, []);
+  
+  // โหลดข้อมูลโปรไฟล์ที่มีอยู่
+  const loadProfileData = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const res = await fetch('http://localhost:8000/api/profile', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (res.ok) {
+        const profileData = await res.json();
+        console.log('Loading existing profile data:', profileData);
+        
+        // อัปเดต formData ด้วยข้อมูลที่มีอยู่
+        setFormData({
+          firstName: profileData.firstName || '',
+          lastName: profileData.lastName || '',
+          nickName: profileData.nickName || '',
+          address: {
+            houseNo: profileData.address?.houseNo || '',
+            village: profileData.address?.village || '',
+            soi: profileData.address?.soi || '',
+            road: profileData.address?.road || '',
+            subDistrict: profileData.address?.subDistrict || '',
+            district: profileData.address?.district || '',
+            province: profileData.address?.province || '',
+            postalCode: profileData.address?.postalCode || ''
+          },
+          idCardNumber: profileData.idCardNumber || '',
+          age: profileData.age || '',
+          birthDate: profileData.birthDate ? new Date(profileData.birthDate).toISOString().split('T')[0] : '',
+          gender: profileData.gender || '',
+          nationality: profileData.nationality || '',
+          bloodType: profileData.bloodType || '',
+          weight: profileData.weight || '',
+          height: profileData.height || '',
+          phoneNumber: profileData.phoneNumber || '',
+          socialMedia: {
+            facebook: profileData.socialMedia?.facebook || '',
+            line: profileData.socialMedia?.line || '',
+            instagram: profileData.socialMedia?.instagram || '',
+            twitter: profileData.socialMedia?.twitter || '',
+            tiktok: profileData.socialMedia?.tiktok || ''
+          },
+          lifestyle: profileData.lifestyle || '',
+          hobbies: profileData.hobbies || []
+        });
+      } else if (res.status !== 404) {
+        // If not 404, it's a real error
+        console.error('Error loading profile:', res.statusText);
+      }
+    } catch (error) {
+      console.error('Error loading profile data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -132,7 +196,7 @@ export default function CreateProfile() {  // เปลี่ยนชื่อ�
         bloodType: formData.bloodType || 'A'
       };
       
-      // Handle empty idCardNumber to prevent duplicate key error
+      // Handle empty idCardNumber
       if (!cleanedFormData.idCardNumber || cleanedFormData.idCardNumber.trim() === '') {
         cleanedFormData.idCardNumber = null;
       }
@@ -174,14 +238,26 @@ export default function CreateProfile() {  // เปลี่ยนชื่อ�
       console.log('Profile response:', data);
       
       if (res.ok && data.success) {
-        setSuccess('✅ บันทึกข้อมูลสำเร็จ! ข้อมูลของคุณถูกส่งให้ผู้ดูแลระบบตรวจสอบแล้ว กรุณารอการอนุมัติก่อนเข้าใช้งานเต็มรูปแบบ');
+        // Check if user was previously rejected
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const wasRejected = user.approvalStatus === 'rejected';
+        
+        setSuccess(wasRejected 
+          ? '✅ อัปเดตข้อมูลสำเร็จ! ข้อมูลใหม่ของคุณถูกส่งให้ผู้ดูแลระบบตรวจสอบแล้ว สถานะของคุณจะเปลี่ยนเป็น "รอการอนุมัติ" ชั่วคราว'
+          : '✅ บันทึกข้อมูลสำเร็จ! ข้อมูลของคุณถูกส่งให้ผู้ดูแลระบบตรวจสอบแล้ว กรุณารอการอนุมัติก่อนเข้าใช้งานเต็มรูปแบบ'
+        );
         
         // อัพเดท user ใน localStorage (client-side only)
         if (typeof window !== 'undefined') {
           try {
-            const user = JSON.parse(localStorage.getItem('user'));
-            user.profileComplete = true;
-            localStorage.setItem('user', JSON.stringify(user));
+            const updatedUser = JSON.parse(localStorage.getItem('user'));
+            updatedUser.profileComplete = true;
+            // If was rejected, update status to pending on client side for immediate UI update
+            if (wasRejected) {
+              updatedUser.approvalStatus = 'pending';
+            }
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            console.log('User data updated in localStorage:', updatedUser);
           } catch (error) {
             console.error('Error updating localStorage:', error);
           }
@@ -219,8 +295,18 @@ export default function CreateProfile() {  // เปลี่ยนชื่อ�
                 <h4 className="mb-0">กรอกข้อมูลโปรไฟล์</h4>
               </div>
               <div className="card-body">
+                {/* Loading state */}
+                {loading && (
+                  <div className="text-center py-5">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">กำลังโหลดข้อมูล...</span>
+                    </div>
+                    <p className="mt-3">กำลังโหลดข้อมูลโปรไฟล์เดิม...</p>
+                  </div>
+                )}
+                
                 {/* Pending status message */}
-                {showPendingMessage && (
+                {!loading && showPendingMessage && (
                   <div className="alert alert-warning" role="alert">
                     <h5 className="alert-heading">📋 รอการอนุมัติ</h5>
                     <p className="mb-0">บัญชีของคุณอยู่ระหว่างการตรวจสอบ คุณสามารถกรอกข้อมูลส่วนตัวได้ตอนนี้ และรอการอนุมัติจากผู้ดูแลระบบ</p>
@@ -234,7 +320,8 @@ export default function CreateProfile() {  // เปลี่ยนชื่อ�
                   <div className="alert alert-success">{success}</div>
                 )}
                 
-                <form onSubmit={handleSubmit}>
+                {!loading && (
+                  <form onSubmit={handleSubmit}>
                   {/* ข้อมูลส่วนตัว */}
                   <div className="card mb-3">
                     <div className="card-header bg-light">
@@ -625,6 +712,7 @@ export default function CreateProfile() {  // เปลี่ยนชื่อ�
                     </button>
                   </div>
                 </form>
+                )}
               </div>
             </div>
           </div>

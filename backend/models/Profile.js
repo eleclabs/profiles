@@ -34,9 +34,8 @@ const ProfileSchema = new mongoose.Schema({
     
     // ข้อมูลส่วนบุคคล
     idCardNumber: {
-        type: String,
-        unique: true,
-        sparse: true
+        type: String
+        // Removed unique constraint to allow multiple users with same ID card
     },
     age: Number,
     birthDate: Date,

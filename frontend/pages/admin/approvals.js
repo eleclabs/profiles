@@ -9,16 +9,21 @@ export default function Approvals() {
   const [processing, setProcessing] = useState({});
   const [approvalClicks, setApprovalClicks] = useState({});
   const [error, setError] = useState('');
-  const [viewMode, setViewMode] = useState('all'); // 'all', 'pending', or 'approved'
+  const [viewMode, setViewMode] = useState('all');
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewingUser, setViewingUser] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   
+  // State สำหรับดูรูปขยาย
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState('');
+  const [selectedImageTitle, setSelectedImageTitle] = useState('');
+  
   useEffect(() => {
-    // Only run on client-side
     if (typeof window === 'undefined') return;
     
-    // ตรวจสอบ token และ user role 
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     
@@ -35,13 +40,10 @@ export default function Approvals() {
     fetchAllUsers();
   }, []);
   
-  // ✅ แก้ไข: fetch ข้อมูลทั้งหมดเพียงครั้งเดียว
   const fetchAllUsers = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      
-      console.log('Fetching all users...');
       
       const res = await fetch('http://localhost:8000/api/admin/all-users', {
         headers: {
@@ -51,21 +53,11 @@ export default function Approvals() {
       });
       
       if (!res.ok) {
-        const errorText = await res.text();
-        console.error('Error response:', errorText);
-        throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+        throw new Error(`Failed to fetch: ${res.status}`);
       }
       
       const data = await res.json();
-      console.log('Fetched all users data:', data);
-      
-      // แสดงโครงสร้างข้อมูลเพื่อตรวจสอบ
-      if (data.length > 0) {
-        console.log('Sample user structure:', data[0]);
-        console.log('Approval status from userData:', data[0].userData?.approvalStatus);
-        console.log('Approval status direct:', data[0].approvalStatus);
-      }
-      
+      console.log('Fetched users:', data);
       setAllUsers(data);
       setError('');
       
@@ -73,8 +65,7 @@ export default function Approvals() {
       console.error('Fetch error:', err);
       setError(`เกิดข้อผิดพลาดในการดึงข้อมูล: ${err.message}`);
       
-      // ถ้า token หมดอายุ
-      if (err.message.includes('401') || err.message.includes('Unauthorized')) {
+      if (err.message.includes('401')) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         router.replace('/login');
@@ -83,28 +74,65 @@ export default function Approvals() {
       setLoading(false);
     }
   };
-
-  // ✅ ไม่ต้อง fetch ใหม่เมื่อเปลี่ยน viewMode
   
-  // ฟังก์ชันช่วยในการดึงสถานะผู้ใช้
   const getUserStatus = (user) => {
-    // ลองตรวจสอบจากหลายๆ ที่
     return user.userData?.approvalStatus || user.approvalStatus || 'pending';
   };
   
-  // คำนวณจำนวนผู้ใช้ตามสถานะต่างๆ จาก allUsers เสมอ
   const pendingCount = allUsers.filter(u => getUserStatus(u) === 'pending').length;
   const approvedCount = allUsers.filter(u => getUserStatus(u) === 'approved').length;
-  const rejectedCount = allUsers.filter(u => getUserStatus(u) === 'rejected').length;
   
-  console.log('Counts - Total:', allUsers.length, 'Pending:', pendingCount, 'Approved:', approvedCount, 'Rejected:', rejectedCount);
+  const handleViewUser = (user) => {
+    console.log('=== User Data Debug ===');
+    console.log('Full user object:', user);
+    console.log('Image fields:', {
+      profileImage: user.profileImage,
+      idCardImages: user.idCardImages,
+      idCardFront: user.idCardFront,
+      idCardBack: user.idCardBack
+    });
+    
+    // Log the actual URLs that will be used
+    if (user.profileImage) {
+      console.log('Profile Image URL:', getImageUrl(user.profileImage));
+    }
+    if (user.idCardImages?.front) {
+      console.log('ID Card Front URL:', getImageUrl(user.idCardImages.front));
+    }
+    if (user.idCardImages?.back) {
+      console.log('ID Card Back URL:', getImageUrl(user.idCardImages.back));
+    }
+    
+    setViewingUser(user);
+    setShowViewModal(true);
+  };
+  
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    
+    // Convert backslashes to forward slashes for web URLs
+    const normalizedPath = imagePath.replace(/\\/g, '/');
+    
+    // If path already includes 'uploads/', just prepend the base URL
+    if (normalizedPath.includes('uploads/')) {
+      return `http://localhost:8000/${normalizedPath}`;
+    }
+    
+    // Otherwise, assume it's just the filename and prepend uploads/
+    return `http://localhost:8000/uploads/${normalizedPath}`;
+  };
+  
+  // ฟังก์ชันดูรูปขยาย
+  const handleViewImage = (imageUrl, title) => {
+    setSelectedImage(imageUrl);
+    setSelectedImageTitle(title);
+    setShowImageModal(true);
+  };
   
   const handleApprove = async (userId) => {
-    // Get current click count for this user
     const currentClicks = approvalClicks[userId] || 0;
     const newClicks = currentClicks + 1;
     
-    // Check if this is the third click
     if (newClicks < 3) {
       setApprovalClicks(prev => ({ ...prev, [userId]: newClicks }));
       alert(`กรุณาคลิกอนุมัติอีก ${3 - newClicks} ครั้ง (ต้องคลิก 3 ครั้ง)`);
@@ -124,14 +152,11 @@ export default function Approvals() {
       });
       
       if (res.ok) {
-        // Reset click count after successful approval
         setApprovalClicks(prev => ({ ...prev, [userId]: 0 }));
         
-        // ✅ อัปเดตสถานะใน state โดยไม่ต้อง fetch ใหม่
         setAllUsers(prevUsers => 
           prevUsers.map(user => {
             if (user.userData?._id === userId || user._id === userId) {
-              // อัปเดตสถานะเป็น approved
               if (user.userData) {
                 return {
                   ...user,
@@ -176,11 +201,9 @@ export default function Approvals() {
       });
       
       if (res.ok) {
-        // ✅ อัปเดตสถานะใน state โดยไม่ต้อง fetch ใหม่
         setAllUsers(prevUsers => 
           prevUsers.map(user => {
             if (user.userData?._id === userId || user._id === userId) {
-              // อัปเดตสถานะเป็น rejected
               if (user.userData) {
                 return {
                   ...user,
@@ -212,12 +235,8 @@ export default function Approvals() {
   };
 
   const handleEditUser = (user) => {
-    console.log('Editing user data:', user);
     setEditingUser(user);
-    
-    // แก้ไขการดึงข้อมูลให้ถูกต้องตามโครงสร้าง
     setEditFormData({
-      // ข้อมูลจาก profile
       firstName: user.firstName || '',
       lastName: user.lastName || '',
       nickName: user.nickName || '',
@@ -230,29 +249,15 @@ export default function Approvals() {
       weight: user.weight || '',
       height: user.height || '',
       idCardNumber: user.idCardNumber || '',
-      
-      // ข้อมูลที่อยู่ใน nested objects
       address: user.address || {
-        houseNo: '',
-        village: '',
-        soi: '',
-        road: '',
-        subDistrict: '',
-        district: '',
-        province: '',
-        postalCode: ''
+        houseNo: '', village: '', soi: '', road: '',
+        subDistrict: '', district: '', province: '', postalCode: ''
       },
       socialMedia: user.socialMedia || {
-        facebook: '',
-        line: '',
-        instagram: '',
-        twitter: '',
-        tiktok: ''
+        facebook: '', line: '', instagram: '', twitter: '', tiktok: ''
       },
       lifestyle: user.lifestyle || '',
       hobbies: user.hobbies || [],
-      
-      // ข้อมูลจาก userData (email)
       email: user.userData?.email || ''
     });
     
@@ -279,7 +284,6 @@ export default function Approvals() {
         alert('แก้ไขข้อมูลผู้ใช้เรียบร้อย');
         setShowEditModal(false);
         
-        // ✅ อัปเดตข้อมูลใน state โดยไม่ต้อง fetch ใหม่
         setAllUsers(prevUsers => 
           prevUsers.map(user => {
             if (user.userData?._id === editingUser.userData._id) {
@@ -308,7 +312,6 @@ export default function Approvals() {
   const handleEditChange = (e) => {
     const { name, value } = e.target;
     
-    // จัดการกับ nested object (address และ socialMedia)
     if (name.includes('.')) {
       const [parent, child] = name.split('.');
       setEditFormData(prev => ({
@@ -335,7 +338,7 @@ export default function Approvals() {
   };
 
   const handleDeleteUser = async (user) => {
-    if (!confirm(`คุณต้องการลบผู้ใช้ "${user.firstName} ${user.lastName}" ใช่หรือไม่?\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!`)) {
+    if (!confirm(`คุณต้องการลบผู้ใช้ "${user.firstName} ${user.lastName}" ใช่หรือไม่?`)) {
       return;
     }
 
@@ -352,25 +355,11 @@ export default function Approvals() {
       
       if (res.ok) {
         alert('ลบผู้ใช้เรียบร้อย');
-        
-        // ✅ ลบผู้ใช้ออกจาก state
         setAllUsers(prevUsers => 
           prevUsers.filter(u => u.userData?._id !== user.userData._id)
         );
       } else {
-        const responseText = await res.text();
-        console.error('Delete user error response:', responseText);
-        
-        if (responseText.includes('<!DOCTYPE')) {
-          alert('เกิดข้อผิดพลาด: Backend server ไม่พบ route หรือมีข้อผิดพลาด\nกรุณา restart backend server');
-        } else {
-          try {
-            const errorData = JSON.parse(responseText);
-            alert(errorData.message || 'เกิดข้อผิดพลาด');
-          } catch {
-            alert(`เกิดข้อผิดพลาด: ${res.status} - ${responseText.substring(0, 100)}`);
-          }
-        }
+        alert('เกิดข้อผิดพลาดในการลบผู้ใช้');
       }
     } catch (err) {
       console.error('Delete user error:', err);
@@ -395,9 +384,6 @@ export default function Approvals() {
       });
       
       if (res.ok) {
-        alert('เลิกอนุมัติผู้ใช้เรียบร้อย');
-        
-        // ✅ อัปเดตสถานะเป็น pending
         setAllUsers(prevUsers => 
           prevUsers.map(u => {
             if (u.userData?._id === user.userData._id) {
@@ -420,19 +406,7 @@ export default function Approvals() {
           })
         );
       } else {
-        const responseText = await res.text();
-        console.error('Revoke approval error response:', responseText);
-        
-        if (responseText.includes('<!DOCTYPE')) {
-          alert('เกิดข้อผิดพลาด: Backend server ไม่พบ route หรือมีข้อผิดพลาด\nกรุณา restart backend server');
-        } else {
-          try {
-            const errorData = JSON.parse(responseText);
-            alert(errorData.message || 'เกิดข้อผิดพลาด');
-          } catch {
-            alert(`เกิดข้อผิดพลาด: ${res.status} - ${responseText.substring(0, 100)}`);
-          }
-        }
+        alert('เกิดข้อผิดพลาดในการเลิกอนุมัติ');
       }
     } catch (err) {
       console.error('Revoke approval error:', err);
@@ -457,7 +431,6 @@ export default function Approvals() {
       });
       
       if (res.ok) {
-        // ✅ อัปเดตสถานะทั้งหมดเป็น approved
         setAllUsers(prevUsers => 
           prevUsers.map(user => {
             if (getUserStatus(user) === 'pending') {
@@ -574,9 +547,7 @@ export default function Approvals() {
                           {allUsers
                             .filter(user => {
                               if (viewMode === 'all') return true;
-                              
                               const status = getUserStatus(user);
-                              
                               if (viewMode === 'pending') return status === 'pending';
                               if (viewMode === 'approved') return status === 'approved';
                               return true;
@@ -604,7 +575,15 @@ export default function Approvals() {
                                 <td>{user.createdAt ? new Date(user.createdAt).toLocaleDateString('th-TH') : '-'}</td>
                                 <td>
                                   <div className="btn-group" role="group">
-                                    {/* ปุ่มแก้ไข - ใช้ได้เฉพาะอนุมัติแล้ว */}
+                                    <button
+                                      className="btn btn-info btn-sm"
+                                      onClick={() => handleViewUser(user)}
+                                      title="ดูข้อมูลผู้ใช้"
+                                    >
+                                      <i className="fas fa-eye"></i>
+                                      <span className="d-none d-md-inline ms-1">ดู</span>
+                                    </button>
+                                    
                                     {status === 'approved' ? (
                                       <button
                                         className="btn btn-primary btn-sm"
@@ -625,7 +604,6 @@ export default function Approvals() {
                                       </button>
                                     )}
                                     
-                                    {/* ปุ่มเลิกอนุมัติ - ใช้ได้เฉพาะอนุมัติแล้ว */}
                                     {status === 'approved' && (
                                       <button
                                         className="btn btn-warning btn-sm"
@@ -637,7 +615,6 @@ export default function Approvals() {
                                       </button>
                                     )}
                                     
-                                    {/* ปุ่มลบ - ใช้ได้ทุกสถานะ */}
                                     <button
                                       className="btn btn-danger btn-sm"
                                       onClick={() => handleDeleteUser(user)}
@@ -647,7 +624,6 @@ export default function Approvals() {
                                       <span className="d-none d-md-inline ms-1">ลบ</span>
                                     </button>
                                     
-                                    {/* ปุ่มอนุมัติและปฏิเสธ - ใช้ได้เฉพาะรออนุมัติ */}
                                     {status === 'pending' && (
                                       <>
                                         <button
@@ -685,19 +661,740 @@ export default function Approvals() {
         </div>
       </div>
       
-      {/* Edit User Modal - ฟอร์มแก้ไขข้อมูลครบถ้วน */}
+      {/* Modal แสดงข้อมูลผู้ใช้ */}
+      {showViewModal && viewingUser && (
+        <div className="modal show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-xl">
+            <div className="modal-content">
+              <div className="modal-header bg-primary text-white">
+                <h5 className="modal-title">
+                  ข้อมูลผู้ใช้: {viewingUser.firstName} {viewingUser.lastName}
+                  <span className={`badge ms-2 ${
+                    getUserStatus(viewingUser) === 'approved' ? 'bg-success' : 
+                    getUserStatus(viewingUser) === 'rejected' ? 'bg-danger' : 
+                    'bg-warning'
+                  }`}>
+                    {getUserStatus(viewingUser) === 'approved' ? 'อนุมัติแล้ว' : 
+                     getUserStatus(viewingUser) === 'rejected' ? 'ถูกปฏิเสธ' : 
+                     'รออนุมัติ'}
+                  </span>
+                </h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowViewModal(false)}></button>
+              </div>
+              <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                
+                {/* ข้อมูลส่วนตัว */}
+                <div className="card mb-3">
+                  <div className="card-header bg-light">
+                    <h6 className="mb-0">ข้อมูลส่วนตัว</h6>
+                  </div>
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-md-4">
+                        <p><strong>ชื่อ:</strong> {viewingUser.firstName || '-'}</p>
+                      </div>
+                      <div className="col-md-4">
+                        <p><strong>นามสกุล:</strong> {viewingUser.lastName || '-'}</p>
+                      </div>
+                      <div className="col-md-4">
+                        <p><strong>ชื่อเล่น:</strong> {viewingUser.nickName || '-'}</p>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <p><strong>อีเมล:</strong> {viewingUser.userData?.email || '-'}</p>
+                      </div>
+                      <div className="col-md-6">
+                        <p><strong>เบอร์โทร:</strong> {viewingUser.phoneNumber || '-'}</p>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-3">
+                        <p><strong>อายุ:</strong> {viewingUser.age || '-'}</p>
+                      </div>
+                      <div className="col-md-3">
+                        <p><strong>วันเกิด:</strong> {viewingUser.birthDate ? new Date(viewingUser.birthDate).toLocaleDateString('th-TH') : '-'}</p>
+                      </div>
+                      <div className="col-md-3">
+                        <p><strong>เพศ:</strong> {
+                          viewingUser.gender === 'male' ? 'ชาย' :
+                          viewingUser.gender === 'female' ? 'หญิง' :
+                          viewingUser.gender === 'other' ? 'อื่นๆ' : '-'
+                        }</p>
+                      </div>
+                      <div className="col-md-3">
+                        <p><strong>สัญชาติ:</strong> {viewingUser.nationality || '-'}</p>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-3">
+                        <p><strong>กรุ๊ปเลือด:</strong> {viewingUser.bloodType || '-'}</p>
+                      </div>
+                      <div className="col-md-3">
+                        <p><strong>น้ำหนัก:</strong> {viewingUser.weight ? `${viewingUser.weight} กก.` : '-'}</p>
+                      </div>
+                      <div className="col-md-3">
+                        <p><strong>ส่วนสูง:</strong> {viewingUser.height ? `${viewingUser.height} ซม.` : '-'}</p>
+                      </div>
+                      <div className="col-md-3">
+                        <p><strong>เลขบัตรประชาชน:</strong> {viewingUser.idCardNumber || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* ที่อยู่ */}
+                <div className="card mb-3">
+                  <div className="card-header bg-light">
+                    <h6 className="mb-0">ที่อยู่</h6>
+                  </div>
+                  <div className="card-body">
+                    {viewingUser.address ? (
+                      <>
+                        <p>
+                          {viewingUser.address.houseNo && `บ้านเลขที่ ${viewingUser.address.houseNo} `}
+                          {viewingUser.address.village && `หมู่ ${viewingUser.address.village} `}
+                          {viewingUser.address.soi && `ซอย ${viewingUser.address.soi} `}
+                          {viewingUser.address.road && `ถนน ${viewingUser.address.road} `}
+                        </p>
+                        <p>
+                          {viewingUser.address.subDistrict && `ตำบล/แขวง ${viewingUser.address.subDistrict} `}
+                          {viewingUser.address.district && `อำเภอ/เขต ${viewingUser.address.district} `}
+                        </p>
+                        <p>
+                          {viewingUser.address.province && `จังหวัด ${viewingUser.address.province} `}
+                          {viewingUser.address.postalCode && `รหัสไปรษณีย์ ${viewingUser.address.postalCode}`}
+                        </p>
+                      </>
+                    ) : (
+                      <p>-</p>
+                    )}
+                  </div>
+                </div>
+                
+                {/* โซเชียลมีเดีย */}
+                <div className="card mb-3">
+                  <div className="card-header bg-light">
+                    <h6 className="mb-0">โซเชียลมีเดีย</h6>
+                  </div>
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-md-4">
+                        <p><strong>Facebook:</strong> {viewingUser.socialMedia?.facebook || '-'}</p>
+                      </div>
+                      <div className="col-md-4">
+                        <p><strong>LINE:</strong> {viewingUser.socialMedia?.line || '-'}</p>
+                      </div>
+                      <div className="col-md-4">
+                        <p><strong>Instagram:</strong> {viewingUser.socialMedia?.instagram || '-'}</p>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-4">
+                        <p><strong>Twitter:</strong> {viewingUser.socialMedia?.twitter || '-'}</p>
+                      </div>
+                      <div className="col-md-4">
+                        <p><strong>TikTok:</strong> {viewingUser.socialMedia?.tiktok || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* ข้อมูลเพิ่มเติม */}
+                <div className="card mb-3">
+                  <div className="card-header bg-light">
+                    <h6 className="mb-0">ข้อมูลเพิ่มเติม</h6>
+                  </div>
+                  <div className="card-body">
+                    <p><strong>ไลฟ์สไตล์:</strong> {viewingUser.lifestyle || '-'}</p>
+                    <p><strong>งานอดิเรก:</strong> {viewingUser.hobbies?.length ? viewingUser.hobbies.join(', ') : '-'}</p>
+                  </div>
+                </div>
+                
+                {/* รูปภาพ */}
+                {(viewingUser.profileImage || viewingUser.idCardImages?.front || viewingUser.idCardImages?.back) && (
+                  <div className="card mb-3">
+                    <div className="card-header bg-light">
+                      <h6 className="mb-0">รูปภาพ</h6>
+                    </div>
+                    <div className="card-body">
+                      <div className="row">
+                        {viewingUser.profileImage && (
+                          <div className="col-md-4 mb-3">
+                            <p><strong>รูปโปรไฟล์:</strong></p>
+                            <div 
+                              className="image-preview-container" 
+                              style={{ 
+                                cursor: 'pointer',
+                                border: '1px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '10px',
+                                textAlign: 'center',
+                                minHeight: '200px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'center',
+                                alignItems: 'center'
+                              }}
+                              onClick={() => {
+                                const imageUrl = getImageUrl(viewingUser.profileImage);
+                                if (imageUrl) {
+                                  handleViewImage(imageUrl, `รูปโปรไฟล์ - ${viewingUser.firstName} ${viewingUser.lastName}`);
+                                }
+                              }}
+                            >
+                              <img 
+                                src={getImageUrl(viewingUser.profileImage)} 
+                                alt="Profile" 
+                                className="img-fluid rounded"
+                                style={{ maxHeight: '150px', maxWidth: '100%', display: 'block' }}
+                                onError={(e) => {
+                                  console.error('Profile image failed to load:', e.target.src);
+                                  e.target.style.display = 'none';
+                                  e.target.nextElementSibling.style.display = 'block';
+                                }}
+                                onLoad={(e) => {
+                                  e.target.nextElementSibling.style.display = 'none';
+                                }}
+                              />
+                              <div style={{ display: 'none', color: '#dc3545', textAlign: 'center' }}>
+                                <i className="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                                <p>ไม่สามารถโหลดรูปภาพ</p>
+                                <small>Path: {viewingUser.profileImage}</small>
+                              </div>
+                              <div className="mt-2">
+                                <small className="text-primary">คลิกเพื่อดูรูปใหญ่</small>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {viewingUser.idCardImages?.front && (
+                          <div className="col-md-4 mb-3">
+                            <p><strong>บัตรประชาชนด้านหน้า:</strong></p>
+                            <div 
+                              className="image-preview-container" 
+                              style={{ 
+                                cursor: 'pointer',
+                                border: '1px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '10px',
+                                textAlign: 'center',
+                                minHeight: '200px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'center',
+                                alignItems: 'center'
+                              }}
+                              onClick={() => {
+                                const imageUrl = getImageUrl(viewingUser.idCardImages.front);
+                                if (imageUrl) {
+                                  handleViewImage(imageUrl, `บัตรประชาชนด้านหน้า - ${viewingUser.firstName} ${viewingUser.lastName}`);
+                                }
+                              }}
+                            >
+                              <img 
+                                src={getImageUrl(viewingUser.idCardImages.front)} 
+                                alt="ID Card Front" 
+                                className="img-fluid rounded"
+                                style={{ maxHeight: '150px', maxWidth: '100%', display: 'block' }}
+                                onError={(e) => {
+                                  console.error('ID card front image failed to load:', e.target.src);
+                                  e.target.style.display = 'none';
+                                  e.target.nextElementSibling.style.display = 'block';
+                                }}
+                                onLoad={(e) => {
+                                  e.target.nextElementSibling.style.display = 'none';
+                                }}
+                              />
+                              <div style={{ display: 'none', color: '#dc3545', textAlign: 'center' }}>
+                                <i className="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                                <p>ไม่สามารถโหลดรูปภาพ</p>
+                                <small>Path: {viewingUser.idCardImages.front}</small>
+                              </div>
+                              <div className="mt-2">
+                                <small className="text-primary">คลิกเพื่อดูรูปใหญ่</small>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {viewingUser.idCardImages?.back && (
+                          <div className="col-md-4 mb-3">
+                            <p><strong>บัตรประชาชนด้านหลัง:</strong></p>
+                            <div 
+                              className="image-preview-container" 
+                              style={{ 
+                                cursor: 'pointer',
+                                border: '1px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '10px',
+                                textAlign: 'center',
+                                minHeight: '200px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'center',
+                                alignItems: 'center'
+                              }}
+                              onClick={() => {
+                                const imageUrl = getImageUrl(viewingUser.idCardImages.back);
+                                if (imageUrl) {
+                                  handleViewImage(imageUrl, `บัตรประชาชนด้านหลัง - ${viewingUser.firstName} ${viewingUser.lastName}`);
+                                }
+                              }}
+                            >
+                              <img 
+                                src={getImageUrl(viewingUser.idCardImages.back)} 
+                                alt="ID Card Back" 
+                                className="img-fluid rounded"
+                                style={{ maxHeight: '150px', maxWidth: '100%', display: 'block' }}
+                                onError={(e) => {
+                                  console.error('ID card back image failed to load:', e.target.src);
+                                  e.target.style.display = 'none';
+                                  e.target.nextElementSibling.style.display = 'block';
+                                }}
+                                onLoad={(e) => {
+                                  e.target.nextElementSibling.style.display = 'none';
+                                }}
+                              />
+                              <div style={{ display: 'none', color: '#dc3545', textAlign: 'center' }}>
+                                <i className="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                                <p>ไม่สามารถโหลดรูปภาพ</p>
+                                <small>Path: {viewingUser.idCardImages.back}</small>
+                              </div>
+                              <div className="mt-2">
+                                <small className="text-primary">คลิกเพื่อดูรูปใหญ่</small>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                {getUserStatus(viewingUser) === 'pending' && (
+                  <>
+                    <button
+                      className="btn btn-success"
+                      onClick={() => {
+                        handleApprove(viewingUser.userData?._id || viewingUser._id);
+                        setShowViewModal(false);
+                      }}
+                      disabled={processing[viewingUser.userData?._id || viewingUser._id]}
+                    >
+                      อนุมัติ
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        handleReject(viewingUser.userData?._id || viewingUser._id);
+                        setShowViewModal(false);
+                      }}
+                      disabled={processing[viewingUser.userData?._id || viewingUser._id]}
+                    >
+                      ปฏิเสธ
+                    </button>
+                  </>
+                )}
+                <button type="button" className="btn btn-primary" onClick={() => setShowViewModal(false)}>
+                  ปิด
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal แสดงรูปขยาย */}
+      {showImageModal && (
+        <div className="modal show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.8)' }}>
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content bg-dark text-white">
+              <div className="modal-header border-secondary">
+                <h5 className="modal-title">{selectedImageTitle}</h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowImageModal(false)}></button>
+              </div>
+              <div className="modal-body text-center">
+                <img 
+                  src={selectedImage} 
+                  alt={selectedImageTitle}
+                  className="img-fluid"
+                  style={{ maxHeight: '70vh' }}
+                />
+              </div>
+              <div className="modal-footer border-secondary">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowImageModal(false)}>
+                  ปิด
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* ✅ Edit User Modal - ใส่เนื้อหาให้ครบ */}
       {showEditModal && editingUser && (
         <div className="modal show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-xl">
             <div className="modal-content">
-              <div className="modal-header">
+              <div className="modal-header bg-primary text-white">
                 <h5 className="modal-title">แก้ไขข้อมูลผู้ใช้: {editingUser.firstName} {editingUser.lastName}</h5>
-                <button type="button" className="btn-close" onClick={() => setShowEditModal(false)}></button>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowEditModal(false)}></button>
               </div>
               <form onSubmit={handleEditSubmit}>
                 <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-                  {/* ข้อมูลส่วนตัว - เหมือนเดิม */}
-                  {/* ... */}
+                  
+                  {/* ข้อมูลส่วนตัว */}
+                  <div className="card mb-3">
+                    <div className="card-header bg-light">
+                      <h6 className="mb-0">ข้อมูลส่วนตัว</h6>
+                    </div>
+                    <div className="card-body">
+                      <div className="row">
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">ชื่อ</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="firstName"
+                            value={editFormData.firstName || ''}
+                            onChange={handleEditChange}
+                            required
+                          />
+                        </div>
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">นามสกุล</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="lastName"
+                            value={editFormData.lastName || ''}
+                            onChange={handleEditChange}
+                            required
+                          />
+                        </div>
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">ชื่อเล่น</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="nickName"
+                            value={editFormData.nickName || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="row">
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label">อีเมล</label>
+                          <input
+                            type="email"
+                            className="form-control"
+                            name="email"
+                            value={editFormData.email || ''}
+                            onChange={handleEditChange}
+                            required
+                          />
+                        </div>
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label">เบอร์โทร</label>
+                          <input
+                            type="tel"
+                            className="form-control"
+                            name="phoneNumber"
+                            value={editFormData.phoneNumber || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="row">
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">อายุ</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            name="age"
+                            value={editFormData.age || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">วันเกิด</label>
+                          <input
+                            type="date"
+                            className="form-control"
+                            name="birthDate"
+                            value={editFormData.birthDate || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">เพศ</label>
+                          <select
+                            className="form-control"
+                            name="gender"
+                            value={editFormData.gender || ''}
+                            onChange={handleEditChange}
+                          >
+                            <option value="">เลือก</option>
+                            <option value="male">ชาย</option>
+                            <option value="female">หญิง</option>
+                            <option value="other">อื่นๆ</option>
+                          </select>
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">สัญชาติ</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="nationality"
+                            value={editFormData.nationality || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="row">
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">กรุ๊ปเลือด</label>
+                          <select
+                            className="form-control"
+                            name="bloodType"
+                            value={editFormData.bloodType || ''}
+                            onChange={handleEditChange}
+                          >
+                            <option value="">เลือก</option>
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="AB">AB</option>
+                            <option value="O">O</option>
+                          </select>
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">น้ำหนัก (kg)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            className="form-control"
+                            name="weight"
+                            value={editFormData.weight || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">ส่วนสูง (cm)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            className="form-control"
+                            name="height"
+                            value={editFormData.height || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">เลขบัตรประชาชน</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="idCardNumber"
+                            value={editFormData.idCardNumber || ''}
+                            onChange={handleEditChange}
+                            pattern="[0-9]{13}"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* ที่อยู่ */}
+                  <div className="card mb-3">
+                    <div className="card-header bg-light">
+                      <h6 className="mb-0">ที่อยู่</h6>
+                    </div>
+                    <div className="card-body">
+                      <div className="row">
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">บ้านเลขที่</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="address.houseNo"
+                            value={editFormData.address?.houseNo || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">หมู่บ้าน</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="address.village"
+                            value={editFormData.address?.village || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">ซอย</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="address.soi"
+                            value={editFormData.address?.soi || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">ถนน</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="address.road"
+                            value={editFormData.address?.road || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                      </div>
+                      <div className="row">
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">ตำบล/แขวง</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="address.subDistrict"
+                            value={editFormData.address?.subDistrict || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">อำเภอ/เขต</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="address.district"
+                            value={editFormData.address?.district || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">จังหวัด</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="address.province"
+                            value={editFormData.address?.province || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">รหัสไปรษณีย์</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="address.postalCode"
+                            value={editFormData.address?.postalCode || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* โซเชียลมีเดีย */}
+                  <div className="card mb-3">
+                    <div className="card-header bg-light">
+                      <h6 className="mb-0">โซเชียลมีเดีย</h6>
+                    </div>
+                    <div className="card-body">
+                      <div className="row">
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">Facebook</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="socialMedia.facebook"
+                            value={editFormData.socialMedia?.facebook || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">LINE</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="socialMedia.line"
+                            value={editFormData.socialMedia?.line || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">Instagram</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="socialMedia.instagram"
+                            value={editFormData.socialMedia?.instagram || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                      </div>
+                      <div className="row">
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">Twitter</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="socialMedia.twitter"
+                            value={editFormData.socialMedia?.twitter || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">TikTok</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            name="socialMedia.tiktok"
+                            value={editFormData.socialMedia?.tiktok || ''}
+                            onChange={handleEditChange}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* ข้อมูลเพิ่มเติม */}
+                  <div className="card mb-3">
+                    <div className="card-header bg-light">
+                      <h6 className="mb-0">ข้อมูลเพิ่มเติม</h6>
+                    </div>
+                    <div className="card-body">
+                      <div className="row">
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label">ไลฟ์สไตล์</label>
+                          <textarea
+                            className="form-control"
+                            name="lifestyle"
+                            value={editFormData.lifestyle || ''}
+                            onChange={handleEditChange}
+                            rows="3"
+                          />
+                        </div>
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label">งานอดิเรก (คั่นด้วยเครื่องหมายจุลภาค)</label>
+                          <textarea
+                            className="form-control"
+                            name="hobbies"
+                            value={editFormData.hobbies?.join(', ') || ''}
+                            onChange={handleHobbiesChange}
+                            rows="3"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>

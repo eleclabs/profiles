@@ -33,8 +33,14 @@ app.use((req, res, next) => {
     next(); // มี next parameter และเรียก next()
 });
 
-// ✅ Static files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// ✅ Static files with CORS headers
+app.use('/uploads', (req, res, next) => {
+    console.log(`📁 Serving upload: ${req.url}`);
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    next();
+}, express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 console.log('📂 Loading route files...');
@@ -65,6 +71,28 @@ app.get('/', (req, res) => {
         message: '✅ API is running...',
         timestamp: new Date().toISOString()
     });
+});
+
+// ✅ Debug uploads endpoint
+app.get('/debug/uploads', (req, res) => {
+    const fs = require('fs');
+    const path = require('path');
+    const uploadsDir = path.join(__dirname, 'uploads');
+    
+    try {
+        const files = fs.readdirSync(uploadsDir);
+        res.json({
+            message: '✅ Uploads directory accessible',
+            path: uploadsDir,
+            files: files.slice(0, 10), // Show first 10 files
+            totalFiles: files.length
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: '❌ Cannot access uploads directory',
+            error: error.message
+        });
+    }
 });
 
 // ✅ 404 handler - ต้องไม่มี next() ในนี้

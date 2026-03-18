@@ -83,7 +83,16 @@ router.post('/', protect, upload.fields([
         }
         
         // อัพเดทสถานะ profileComplete ใน User
-        await User.findByIdAndUpdate(req.user._id, { profileComplete: true });
+        // ถ้าผู้ใช้เคยถูกปฏิเสธ ให้เปลี่ยนสถานะกลับเป็น pending เพื่อรอการอนุมัติใหม่
+        const user = await User.findById(req.user._id);
+        const updateData = { profileComplete: true };
+        
+        if (user.approvalStatus === 'rejected') {
+            updateData.approvalStatus = 'pending';
+            console.log('User was rejected, resetting status to pending for re-approval');
+        }
+        
+        await User.findByIdAndUpdate(req.user._id, updateData);
         
         res.json({ success: true, profile });
     } catch (error) {
@@ -92,16 +101,12 @@ router.post('/', protect, upload.fields([
         // Handle duplicate key errors specifically
         if (error.code === 11000) {
             let field = 'unknown field';
-            if (error.message.includes('idCardNumber')) {
-                field = 'เลขบัตรประชาชน';
-            } else if (error.message.includes('email')) {
+            if (error.message.includes('email')) {
                 field = 'อีเมล';
             }
-            
-            return res.status(400).json({ 
-                success: false, 
-                message: `${field} นี้ถูกใช้ไปแล้ว กรุณาตรวจสอบข้อมูล`,
-                error: error.message 
+            return res.status(400).json({
+                success: false,
+                message: `${field} นี้ถูกใช้ไปแล้ว กรุณาตรวจสอบข้อมูล`
             });
         }
         

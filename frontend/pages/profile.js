@@ -4,7 +4,6 @@ import Layout from '../components/Layout';
 import Link from 'next/link';
 export default function Profile() {
   const router = useRouter();
-  const { pending } = router.query;
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -18,7 +17,8 @@ export default function Profile() {
       return;
     }
     
-    setUser(JSON.parse(userData));
+    const parsedUser = JSON.parse(userData);
+    setUser(parsedUser);
     fetchProfile();
   }, []);
   
@@ -34,6 +34,9 @@ export default function Profile() {
       const data = await res.json();
       if (res.ok) {
         setProfile(data);
+        
+        // Also refresh user data to get updated approval status
+        await refreshUserData();
       }
     } catch (err) {
       console.error('Error fetching profile:', err);
@@ -41,6 +44,32 @@ export default function Profile() {
       setLoading(false);
     }
   };
+  
+  const refreshUserData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:8000/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}` 
+        }
+      });
+      
+      if (res.ok) {
+        const response = await res.json();
+        const userData = response.user; // Extract user from response object
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+        console.log('User data refreshed:', userData);
+      }
+    } catch (err) {
+      console.error('Error refreshing user data:', err);
+    }
+  };
+  
+  // Check if user is approved
+  const isApproved = user?.approvalStatus === 'approved';
+  const isPending = user?.approvalStatus === 'pending';
+  const isRejected = user?.approvalStatus === 'rejected';
   
   if (loading) {
     return (
@@ -57,14 +86,31 @@ export default function Profile() {
   return (
     <Layout>
       <div className="container mt-4">
-        {pending && (
+        {isPending && (
           <div className="alert alert-warning" role="alert">
             <h4 className="alert-heading">รอการอนุมัติ!</h4>
             <p>ข้อมูลของคุณถูกส่งให้ผู้ดูแลระบบตรวจสอบแล้ว กรุณารอการอนุมัติก่อนเข้าใช้งาน</p>
+            <hr />
+            
           </div>
         )}
         
-        {user && user.approvalStatus === 'approved' && (
+        {isRejected && (
+          <div className="alert alert-danger" role="alert">
+            <h4 className="alert-heading">ถูกปฏิเสธ</h4>
+            <p>ข้อมูลของคุณไม่ผ่านการอนุมัติ กรุณาแก้ไขโปรไฟล์ตัวเองและส่งใหม่</p>
+            <hr />
+            <div className="d-flex justify-content-between align-items-center">
+              <small className="mb-0">คุณสามารถแก้ไขข้อมูลและส่งใหม่เพื่อขอการอนุมัติอีกครั้ง</small>
+              <Link href="/profilecreate" className="btn btn-danger btn-sm">
+                <i className="fas fa-edit me-2"></i>
+                แก้ไขโปรไฟล์
+              </Link>
+            </div>
+          </div>
+        )}
+        
+        {isApproved && (
           <div className="row">
             <div className="col-md-4">
               <div className="card">
