@@ -91,37 +91,37 @@ export default function CreateProfile() {  // เปลี่ยนชื่อ�
         
         // อัปเดต formData ด้วยข้อมูลที่มีอยู่
         setFormData({
-          firstName: profileData.firstName || '',
-          lastName: profileData.lastName || '',
-          nickName: profileData.nickName || '',
+          firstName: profileData?.firstName || '',
+          lastName: profileData?.lastName || '',
+          nickName: profileData?.nickName || '',
           address: {
-            houseNo: profileData.address?.houseNo || '',
-            village: profileData.address?.village || '',
-            soi: profileData.address?.soi || '',
-            road: profileData.address?.road || '',
-            subDistrict: profileData.address?.subDistrict || '',
-            district: profileData.address?.district || '',
-            province: profileData.address?.province || '',
-            postalCode: profileData.address?.postalCode || ''
+            houseNo: profileData?.address?.houseNo || '',
+            village: profileData?.address?.village || '',
+            soi: profileData?.address?.soi || '',
+            road: profileData?.address?.road || '',
+            subDistrict: profileData?.address?.subDistrict || '',
+            district: profileData?.address?.district || '',
+            province: profileData?.address?.province || '',
+            postalCode: profileData?.address?.postalCode || ''
           },
-          idCardNumber: profileData.idCardNumber || '',
-          age: profileData.age || '',
-          birthDate: profileData.birthDate ? new Date(profileData.birthDate).toISOString().split('T')[0] : '',
-          gender: profileData.gender || '',
-          nationality: profileData.nationality || '',
-          bloodType: profileData.bloodType || '',
-          weight: profileData.weight || '',
-          height: profileData.height || '',
-          phoneNumber: profileData.phoneNumber || '',
+          idCardNumber: profileData?.idCardNumber || '',
+          age: profileData?.age || '',
+          birthDate: profileData?.birthDate ? new Date(profileData.birthDate).toISOString().split('T')[0] : '',
+          gender: profileData?.gender || '',
+          nationality: profileData?.nationality || '',
+          bloodType: profileData?.bloodType || '',
+          weight: profileData?.weight || '',
+          height: profileData?.height || '',
+          phoneNumber: profileData?.phoneNumber || '',
           socialMedia: {
-            facebook: profileData.socialMedia?.facebook || '',
-            line: profileData.socialMedia?.line || '',
-            instagram: profileData.socialMedia?.instagram || '',
-            twitter: profileData.socialMedia?.twitter || '',
-            tiktok: profileData.socialMedia?.tiktok || ''
+            facebook: profileData?.socialMedia?.facebook || '',
+            line: profileData?.socialMedia?.line || '',
+            instagram: profileData?.socialMedia?.instagram || '',
+            twitter: profileData?.socialMedia?.twitter || '',
+            tiktok: profileData?.socialMedia?.tiktok || ''
           },
-          lifestyle: profileData.lifestyle || '',
-          hobbies: profileData.hobbies || []
+          lifestyle: profileData?.lifestyle || '',
+          hobbies: profileData?.hobbies || []
         });
       } else if (res.status !== 404) {
         // If not 404, it's a real error
