@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Simple Server</title>
+</head>
+<body>
+    <h1>🔧 ทดสอบ Simple HTTP Server</h1>
+    
+    <button onclick="testSimpleServer()">ทดสอบ Simple Server</button>
+    <button onclick="testRegistration()">ทดสอบ Registration (Express)</button>
+    
+    <div id="result"></div>
+
+    <script>
+        async function testSimpleServer() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<h3>กำลังทดสอบ...</h3>';
+            
+            try {
+                const response = await fetch('http://localhost:8000/test', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const text = await response.text();
+                
+                resultDiv.innerHTML = `
+                    <div style="background: #d4edda; padding: 20px; border-radius: 5px;">
+                        <h3>✅ Simple Server ทำงาน!</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Response:</strong></p>
+                        <pre>${text}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div style="background: #f8d7da; padding: 20px; border-radius: 5px;">
+                        <h3>❌ Simple Server ล้มเหลว</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testRegistration() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<h3>กำลังทดสอบ Registration (Express)...</h3>';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'test@example.com',
+                        password: 'test123456'
+                    })
+                });
+
+                const text = await response.text();
+                
+                let resultClass = 'success';
+                let resultTitle = '✅ Registration สำเร็จ!';
+                
+                if (!response.ok) {
+                    resultClass = 'error';
+                    resultTitle = '❌ Registration ล้มเหลว';
+                }
+                
+                resultDiv.innerHTML = `
+                    <div style="background: ${resultClass === 'success' ? '#d4edda' : '#f8d7da'}; padding: 20px; border-radius: 5px;">
+                        <h3>${resultTitle}</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Response:</strong></p>
+                        <pre>${text}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div style="background: #f8d7da; padding: 20px; border-radius: 5px;">
+                        <h3>❌ Registration ล้มเหลว</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Backend Simple</title>
+</head>
+<body>
+    <h1>🔧 Test Backend Connection</h1>
+    
+    <button onclick="testBackend()">Test Backend</button>
+    <button onclick="testAuth()">Test Auth</button>
+    
+    <div id="result"></div>
+
+    <script>
+        async function testBackend() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<h3>Testing backend...</h3>';
+            
+            try {
+                const response = await fetch('http://localhost:8000/', {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                const text = await response.text();
+                
+                resultDiv.innerHTML = `
+                    <div style="background: #d4edda; padding: 20px; border-radius: 5px;">
+                        <h3>✅ Backend Working!</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Response:</strong></p>
+                        <pre>${text}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div style="background: #f8d7da; padding: 20px; border-radius: 5px;">
+                        <h3>❌ Backend Error</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testAuth() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<h3>Testing auth...</h3>';
+            
+            try {
+                // Test with mock token
+                const response = await fetch('http://localhost:8000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'test@test.com',
+                        password: 'test123'
+                    })
+                });
+                
+                const text = await response.text();
+                
+                resultDiv.innerHTML = `
+                    <div style="background: #d4edda; padding: 20px; border-radius: 5px;">
+                        <h3>✅ Auth Working!</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Response:</strong></p>
+                        <pre>${text}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div style="background: #f8d7da; padding: 20px; border-radius: 5px;">
+                        <h3>❌ Auth Error</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
